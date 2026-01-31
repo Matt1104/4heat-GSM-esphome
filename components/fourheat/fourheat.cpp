@@ -19,7 +19,8 @@ static const uint8_t MESSAGE_LENGTH = ID_LENGTH + DATA_LENGTH + 2;
 
 void FourHeat::loop() {
   if (!this->uart_enabled_) {
-    return;  // Non leggere dalla UART se disabilitato
+    this->handle_gsm_response();
+    return;
   }
   while(this->available()) {
     uint8_t c;
@@ -259,6 +260,89 @@ void FourHeat::set_module_offline_(bool offline) {
     this->module_offline_sensor_->publish_state(offline);
   }
 #endif
+}
+
+void FourHeat::send_gsm_command(const std::string &command) {
+  ESP_LOGD("FourHeat", ">>> SIMULAZIONE SMS: %s <<<", command.c_str());
+  
+  // Disabilita la lettura normale fourheat
+  this->uart_enabled_ = false;
+  
+  // Salva il comando da inviare
+  this->pending_command_ = command;
+  this->gsm_dialog_state_ = 1;
+  this->gsm_buffer_.clear();
+  
+  // Invia notifica +CMTI (arriva SMS)
+  this->write_str("\r\n+CMTI: \"SM\",1\r\n");
+  ESP_LOGD("FourHeat", "Inviato: +CMTI notification");
+}
+
+void FourHeat::handle_gsm_response() {
+  // Leggi dalla UART carattere per carattere
+  while (this->available()) {
+    uint8_t c;
+    this->read_byte(&c);
+    
+    if (c == '\r' || c == '\n') {
+      if (this->gsm_buffer_.length() > 0) {
+        ESP_LOGD("FourHeat-GSM", "RX: %s", this->gsm_buffer_.c_str());
+        
+        // AT+CMGR=1 - Il camino chiede di leggere l'SMS
+        if (this->gsm_buffer_.find("AT+CMGR=1") != std::string::npos) {
+          ESP_LOGD("FourHeat-GSM", "Camino chiede lettura SMS");
+          std::string response = "\r\n+CMGR: \"REC UNREAD\",\"+391111111111\",,\r\n";
+          response += this->pending_command_ + "\r\n\r\nOK\r\n";
+          this->write_str(response.c_str());
+          ESP_LOGD("FourHeat-GSM", "Inviato SMS: %s", this->pending_command_.c_str());
+          this->gsm_buffer_.clear();
+          return;
+        }
+        
+        // AT+CMGD=1 - Il camino chiede di cancellare l'SMS
+        if (this->gsm_buffer_.find("AT+CMGD=1") != std::string::npos) {
+          ESP_LOGD("FourHeat-GSM", "Cancellazione SMS");
+          this->write_str("\r\nOK\r\n");
+          this->gsm_buffer_.clear();
+          return;
+        }
+        
+        // AT+CMGF=1 - Il camino imposta modalità testo
+        if (this->gsm_buffer_.find("AT+CMGF=1") != std::string::npos) {
+          ESP_LOGD("FourHeat-GSM", "Modalità testo");
+          this->write_str("\r\nOK\r\n");
+          this->gsm_buffer_.clear();
+          return;
+        }
+        
+        // AT+CMGS - Il camino vuole inviare SMS di conferma
+        if (this->gsm_buffer_.find("AT+CMGS=") != std::string::npos) {
+          ESP_LOGD("FourHeat-GSM", "Prepare SMS conferma");
+          this->write_str("\r\n> ");
+          this->gsm_dialog_state_ = 2;
+          this->gsm_buffer_.clear();
+          return;
+        }
+        
+        // Testo SMS di conferma (quando in stato 2)
+        if (this->gsm_dialog_state_ == 2) {
+          ESP_LOGD("FourHeat-GSM", "Conferma ricevuta: %s", this->gsm_buffer_.c_str());
+          this->write_str("\r\n+CMGS: 1\r\n\r\nOK\r\n");
+          this->gsm_dialog_state_ = 0;
+          ESP_LOGD("FourHeat-GSM", ">>> DIALOGO COMPLETATO <<<");
+          
+          // Riattiva la modalità normale fourheat
+          this->uart_enabled_ = true;
+          this->gsm_buffer_.clear();
+          return;
+        }
+        
+        this->gsm_buffer_.clear();
+      }
+    } else {
+      this->gsm_buffer_ += (char)c;
+    }
+  }
 }
 
 }  // namespace fourheat
