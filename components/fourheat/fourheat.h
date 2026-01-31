@@ -39,6 +39,8 @@ class FourHeat : public PollingComponent, public uart::UARTDevice {
   void send_string_value(const std::string &id, const std::string &value);
   void send_integer_value(const std::string &id, uint32_t value);
   void send_bool_value(const std::string &id, bool value);
+  void disable_uart() { this->uart_enabled_ = false; }
+  void enable_uart() { this->uart_enabled_ = true; }
 
  protected:
 #ifdef USE_BINARY_SENSOR
@@ -65,6 +67,7 @@ class FourHeat : public PollingComponent, public uart::UARTDevice {
 
   bool create_message_(const std::string &id, const std::vector<uint8_t> &value, std::vector<uint8_t> &message);
   void set_module_offline_(bool offline);
+  bool uart_enabled_ = true;
 };
 
 }  // namespace fourheat
