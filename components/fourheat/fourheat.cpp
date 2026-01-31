@@ -18,6 +18,9 @@ static const uint8_t DATA_LENGTH = 12;
 static const uint8_t MESSAGE_LENGTH = ID_LENGTH + DATA_LENGTH + 2;
 
 void FourHeat::loop() {
+  if (!this->uart_enabled_) {
+    return;  // Non leggere dalla UART se disabilitato
+  }
   while(this->available()) {
     uint8_t c;
     this->read_byte(&c);
