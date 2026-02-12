@@ -17,9 +17,8 @@ static const uint8_t DATA_LENGTH = 12;
 static const uint8_t MESSAGE_LENGTH = ID_LENGTH + DATA_LENGTH + 2;
 
 void FourHeat::setup() {
-  ESP_LOGCONFIG(TAG, "FourHeat component setup complete");
+  ESP_LOGCONFIG(TAG, "FourHeat component initialized");
 }
-
 
 void FourHeat::loop() {
   if (!this->uart_enabled_) {
@@ -27,22 +26,11 @@ void FourHeat::loop() {
     return;
   }
 
-#ifdef USE_ESP_IDF
-  // ESP-IDF: lettura batch
-  while (this->available_()) {
-    uint8_t c;
-    if (this->read_byte_(&c)) {
-      this->handle_char_(c);
-    }
-  }
-#else
-  // Arduino: lettura byte-per-byte
   while (this->available()) {
     uint8_t c;
     this->read_byte(&c);
     this->handle_char_(c);
   }
-#endif
 
   if (!this->rx_message_.empty() && millis() - this->last_rx_char_timestamp_ > RX_TIMEOUT) {
     ESP_LOGW(TAG, "Received incomplete data: %s", format_hex_pretty(this->rx_message_).c_str());
@@ -224,13 +212,8 @@ void FourHeat::process_next_tx_message_() {
     return;
   }
 
-#ifdef USE_ESP_IDF
-  this->write_array_(data);
-  this->flush_();
-#else
   this->write_array(data);
   this->flush();
-#endif
   
   this->last_tx_message_timestamp_ = millis();
   this->awaiting_response_ = true;
@@ -266,31 +249,21 @@ void FourHeat::set_module_offline_(bool offline) {
 // ========== LOGICA GSM CUSTOM ==========
 
 void FourHeat::send_gsm_command(const std::string &command) {
-  ESP_LOGD("FourHeat", ">>> SIMULAZIONE SMS: %s <<<", command.c_str());
+  ESP_LOGD(TAG, ">>> SIMULAZIONE SMS: %s <<<", command.c_str());
   this->uart_enabled_ = false;
   this->pending_command_ = command;
   this->gsm_dialog_state_ = 1;
   this->gsm_buffer_.clear();
 
-#ifdef USE_ESP_IDF
-  this->write_str_("\r\n+CMTI: \"SM\",1\r\n");
-#else
   this->write_str("\r\n+CMTI: \"SM\",1\r\n");
-#endif
   
-  ESP_LOGD("FourHeat", "Inviato: +CMTI notification");
+  ESP_LOGD(TAG, "Inviato: +CMTI notification");
 }
 
 void FourHeat::handle_gsm_response() {
-#ifdef USE_ESP_IDF
-  while (this->available_()) {
-    uint8_t c;
-    if (!this->read_byte_(&c)) break;
-#else
   while (this->available()) {
     uint8_t c;
     this->read_byte(&c);
-#endif
     
     if (c == '\r' || c == '\n') {
       if (this->gsm_buffer_.length() > 0) {
@@ -300,11 +273,7 @@ void FourHeat::handle_gsm_response() {
           ESP_LOGD("FourHeat-GSM", "Camino chiede lettura SMS");
           std::string response = "\r\n+CMGR: \"REC UNREAD\",\"+391111111111\",,\r\n";
           response += this->pending_command_ + "\r\n\r\nOK\r\n";
-#ifdef USE_ESP_IDF
-          this->write_str_(response.c_str());
-#else
           this->write_str(response.c_str());
-#endif
           ESP_LOGD("FourHeat-GSM", "Inviato SMS: %s", this->pending_command_.c_str());
           this->gsm_buffer_.clear();
           return;
@@ -312,33 +281,21 @@ void FourHeat::handle_gsm_response() {
 
         if (this->gsm_buffer_.find("AT+CMGD=1") != std::string::npos) {
           ESP_LOGD("FourHeat-GSM", "Cancellazione SMS");
-#ifdef USE_ESP_IDF
-          this->write_str_("\r\nOK\r\n");
-#else
           this->write_str("\r\nOK\r\n");
-#endif
           this->gsm_buffer_.clear();
           return;
         }
 
         if (this->gsm_buffer_.find("AT+CMGF=1") != std::string::npos) {
           ESP_LOGD("FourHeat-GSM", "Modalità testo");
-#ifdef USE_ESP_IDF
-          this->write_str_("\r\nOK\r\n");
-#else
           this->write_str("\r\nOK\r\n");
-#endif
           this->gsm_buffer_.clear();
           return;
         }
 
         if (this->gsm_buffer_.find("AT+CMGS=") != std::string::npos) {
           ESP_LOGD("FourHeat-GSM", "Prepare SMS conferma");
-#ifdef USE_ESP_IDF
-          this->write_str_("\r\n> ");
-#else
           this->write_str("\r\n> ");
-#endif
           this->gsm_dialog_state_ = 2;
           this->gsm_buffer_.clear();
           return;
@@ -346,11 +303,7 @@ void FourHeat::handle_gsm_response() {
 
         if (this->gsm_dialog_state_ == 2) {
           ESP_LOGD("FourHeat-GSM", "Conferma ricevuta: %s", this->gsm_buffer_.c_str());
-#ifdef USE_ESP_IDF
-          this->write_str_("\r\n+CMGS: 1\r\n\r\nOK\r\n");
-#else
           this->write_str("\r\n+CMGS: 1\r\n\r\nOK\r\n");
-#endif
           this->gsm_dialog_state_ = 0;
           ESP_LOGD("FourHeat-GSM", ">>> DIALOGO COMPLETATO <<<");
           this->uart_enabled_ = true;
@@ -365,33 +318,6 @@ void FourHeat::handle_gsm_response() {
     }
   }
 }
-
-// ========== WRAPPER ESP-IDF UART ==========
-
-#ifdef USE_ESP_IDF
-bool FourHeat::available_() {
-  size_t available_bytes = 0;
-  uart_get_buffered_data_len(FOURHEAT_UART_NUM, &available_bytes);
-  return available_bytes > 0;
-}
-
-bool FourHeat::read_byte_(uint8_t *byte) {
-  int len = uart_read_bytes(FOURHEAT_UART_NUM, byte, 1, 0);
-  return len == 1;
-}
-
-void FourHeat::write_array_(const std::vector<uint8_t> &data) {
-  uart_write_bytes(FOURHEAT_UART_NUM, (const char *)data.data(), data.size());
-}
-
-void FourHeat::write_str_(const char *str) {
-  uart_write_bytes(FOURHEAT_UART_NUM, str, strlen(str));
-}
-
-void FourHeat::flush_() {
-  uart_wait_tx_done(FOURHEAT_UART_NUM, 100 / portTICK_PERIOD_MS);
-}
-#endif
 
 }  // namespace fourheat
 }  // namespace esphome
