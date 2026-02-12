@@ -28,18 +28,9 @@ static const uart_config_t UART_CONFIG = {
 #endif
 
 void FourHeat::setup() {
-#ifdef USE_ESP_IDF
-  ESP_LOGCONFIG(TAG, "Setting up FourHeat with ESP-IDF...");
-  ESP_ERROR_CHECK(uart_param_config(FOURHEAT_UART_NUM, &UART_CONFIG));
-  ESP_ERROR_CHECK(uart_set_pin(FOURHEAT_UART_NUM, 
-                                this->parent_->get_tx_pin(),
-                                this->parent_->get_rx_pin(),
-                                UART_PIN_NO_CHANGE, 
-                                UART_PIN_NO_CHANGE));
-  ESP_ERROR_CHECK(uart_driver_install(FOURHEAT_UART_NUM, 1024 * 2, 0, 0, NULL, 0));
-  ESP_LOGI(TAG, "ESP-IDF UART initialized");
-#endif
+  ESP_LOGCONFIG(TAG, "FourHeat component setup complete");
 }
+
 
 void FourHeat::loop() {
   if (!this->uart_enabled_) {
