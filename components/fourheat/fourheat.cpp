@@ -16,17 +16,6 @@ static const uint8_t ID_LENGTH = 6;
 static const uint8_t DATA_LENGTH = 12;
 static const uint8_t MESSAGE_LENGTH = ID_LENGTH + DATA_LENGTH + 2;
 
-#ifdef USE_ESP_IDF
-static const uart_config_t UART_CONFIG = {
-    .baud_rate = 9600,
-    .data_bits = UART_DATA_8_BITS,
-    .parity = UART_PARITY_DISABLE,
-    .stop_bits = UART_STOP_BITS_1,
-    .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
-    .source_clk = UART_SCLK_DEFAULT,
-};
-#endif
-
 void FourHeat::setup() {
   ESP_LOGCONFIG(TAG, "FourHeat component setup complete");
 }
