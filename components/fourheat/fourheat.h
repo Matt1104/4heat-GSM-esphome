@@ -12,11 +12,6 @@
 
 #include "esphome/components/uart/uart.h"
 
-#ifdef USE_ESP_IDF
-#include "driver/uart.h"
-#define FOURHEAT_UART_NUM UART_NUM_1
-#endif
-
 namespace esphome {
 namespace fourheat {
 
@@ -50,7 +45,6 @@ class FourHeat : public PollingComponent, public uart::UARTDevice {
   void disable_uart() { this->uart_enabled_ = false; }
   void enable_uart() { this->uart_enabled_ = true; }
   
-  // Metodi GSM custom
   void send_gsm_command(const std::string &command);
   void handle_gsm_response();
 
@@ -79,20 +73,10 @@ class FourHeat : public PollingComponent, public uart::UARTDevice {
   bool create_message_(const std::string &id, const std::vector<uint8_t> &value, std::vector<uint8_t> &message);
   void set_module_offline_(bool offline);
   
-  // GSM state
   bool uart_enabled_ = true;
   int gsm_dialog_state_ = 0;
   std::string pending_command_ = "";
   std::string gsm_buffer_ = "";
-  
-  // Helper UART wrappers per ESP-IDF
-#ifdef USE_ESP_IDF
-  bool available_();
-  bool read_byte_(uint8_t *byte);
-  void write_array_(const std::vector<uint8_t> &data);
-  void write_str_(const char *str);
-  void flush_();
-#endif
 };
 
 }  // namespace fourheat
